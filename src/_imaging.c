@@ -185,17 +185,16 @@ PyImagingNew(Imaging imOut) {
     return (PyObject *)imagep;
 }
 
-static void
-_dealloc(ImagingObject *imagep) {
+HPyDef_SLOT(Imaging_destroy, Imaging_destroy_impl, HPy_tp_destroy)
+static void Imaging_destroy_impl(void *obj) {
 #ifdef VERBOSE
     printf("imaging %p deleted\n", imagep);
 #endif
-
+    ImagingObject *imagep = (ImagingObject *)obj;
     if (imagep->access) {
         ImagingAccessDelete(imagep->image, imagep->access);
     }
     ImagingDelete(imagep->image);
-    PyObject_Del(imagep);
 }
 
 #define PyImaging_Check(op) (Py_TYPE(op) == Imaging_Type)
@@ -3548,13 +3547,18 @@ static struct PyMethodDef methods[] = {
 
 HPyDef_GET(Imaging_getattr_mode, "mode", Imaging_getattr_mode_impl)
 static HPy Imaging_getattr_mode_impl(HPyContext *ctx, HPy self, void *closure) {
-    return HPy_FromPyObject(ctx, PyUnicode_FromString(((ImagingObject *)HPy_AsPyObject(ctx, self))->image->mode));
+    ImagingObject *im_self = (ImagingObject *)HPy_AsPyObject(ctx, self);
+    HPy hOut = HPy_FromPyObject(ctx, PyUnicode_FromString(im_self->image->mode));
+    Py_DECREF(im_self);
+    return hOut;
 }
 
 HPyDef_GET(Imaging_getattr_size, "size", Imaging_getattr_size_impl)
 static HPy Imaging_getattr_size_impl(HPyContext *ctx, HPy self, void *closure) {
     ImagingObject *im_self = (ImagingObject *) HPy_AsPyObject(ctx, self);
-    return HPy_FromPyObject(ctx, Py_BuildValue("ii", im_self->image->xsize, im_self->image->ysize));
+    HPy hOut = HPy_FromPyObject(ctx, Py_BuildValue("ii", im_self->image->xsize, im_self->image->ysize));
+    Py_DECREF(im_self);
+    return hOut;
 }
 
 static PyObject *
@@ -3575,7 +3579,7 @@ _getattr_ptr(ImagingObject *self, void *closure) {
 HPyDef_GET(Imaging_getattr_unsafe_ptrs, "unsafe_ptrs", Imaging_getattr_unsafe_ptrs_impl)
 static HPy Imaging_getattr_unsafe_ptrs_impl(HPyContext *ctx, HPy self, void *closure) {
     ImagingObject *im_self = (ImagingObject *) HPy_AsPyObject(ctx, self);
-    return HPy_FromPyObject(ctx, Py_BuildValue(
+    HPy hOut = HPy_FromPyObject(ctx, Py_BuildValue(
         "(sn)(sn)(sn)",
         "image8",
         im_self->image->image8,
@@ -3583,6 +3587,8 @@ static HPy Imaging_getattr_unsafe_ptrs_impl(HPyContext *ctx, HPy self, void *clo
         im_self->image->image32,
         "image",
         im_self->image->image));
+    Py_DECREF(im_self);
+    return hOut;
 };
 
 static struct PyGetSetDef getsetters[] = {
@@ -3616,15 +3622,16 @@ image_item(ImagingObject *self, Py_ssize_t i) {
 }
 
 static PyType_Slot Imaging_Type_slots[] = {
-    {Py_tp_dealloc, (destructor)_dealloc},
     {Py_sq_length, (lenfunc)image_length},
     {Py_sq_item, (ssizeargfunc)image_item},
     {Py_tp_methods, methods},
-    {Py_tp_getset, getsetters},
     {0, NULL}
 };
 
 static HPyDef *Imaging_type_defines[]={
+
+    &Imaging_destroy,
+
     &Imaging_getattr_mode,
     &Imaging_getattr_size,
     &Imaging_getattr_unsafe_ptrs,
@@ -3635,7 +3642,7 @@ HPyType_Spec Imaging_Type_spec = {
     .name = "ImagingCore",
     .basicsize = sizeof(ImagingObject),
     .flags = (HPy_TPFLAGS_DEFAULT | HPy_TPFLAGS_BASETYPE),
-    //.legacy_slots = Imaging_Type_slots,
+    .legacy_slots = Imaging_Type_slots,
     .legacy = true,
     .defines = Imaging_type_defines,
 };
